@@ -37,7 +37,6 @@ python3 app.py
 - [Deep Convolutional Generative Adversarial Network](https://www.tensorflow.org/tutorials/generative/dcgan)
 
 # TODO list
-- [ ] Create train script.
 - [ ] Update notebooks to use this repository as reference.
 - [ ] Update [HF model card]((https://huggingface.co/huggan/crypto-gan)).
 - [ ] Improve model, it needs to generate more diverse punks.
