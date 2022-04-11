@@ -11,6 +11,9 @@ This repository was created during the HuggingFace's [HugGAN sprint](https://git
 # Usage
 
 ## Train
+```bash
+python3 train.py
+```
 
 ## Inference using Gradio
 <img src="./assets/gradio_inference.png" width="900" height="300">
