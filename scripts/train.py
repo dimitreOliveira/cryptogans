@@ -4,8 +4,8 @@ import glob
 import argparse
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import tensorflow as tf
+import matplotlib.pyplot as plt
 
 
 # Visualization
@@ -31,13 +31,9 @@ def decode_img(inputs):
     img = tf.image.resize(img, (args.image_size, args.image_size))
     return img
 
-def pre_process(img):
-    img = (img / 255.) * 2 - 1 # scale images to be between -1 and 1
-    return img
-
 
 # Data
-def get_dataset(inputs):
+def get_dataset(inputs, batch_size):
     if type(inputs) == dict:
         dataset = tf.data.Dataset.from_tensor_slices(inputs) # load from paths
     else:
@@ -45,10 +41,10 @@ def get_dataset(inputs):
         dataset = tf.data.Dataset.list_files(filepaths) # load directly from images
     
     dataset = (dataset.map(decode_img, num_parallel_calls=tf.data.AUTOTUNE)
-                      .map(pre_process, num_parallel_calls=tf.data.AUTOTUNE)
                       .shuffle(1024)
-                      # .batch(batch_size, drop_remainder=True)
-                      # .prefetch(tf.data.AUTOTUNE)
+                      .batch(batch_size, drop_remainder=True)
+                      .map(preprocess_model, num_parallel_calls=tf.data.AUTOTUNE)
+                      .prefetch(tf.data.AUTOTUNE)
               )
     return dataset
 
@@ -88,13 +84,50 @@ def train(dataset, epochs, batch_size, codings_size):
       train_step(image_batch, batch_size, codings_size)
 
     print(f"Epoch {epoch+1}/{epochs}")
-    if args.plot_images:
+    if args.images_output_path:
         noise = tf.random.normal([batch_size, codings_size])
         display_images = generator(noise, training=False)
         plot_multiple_images(display_images, 8, epoch)
 
 
 # Model
+class Preprocess(tf.keras.layers.Layer):
+    def __init__(self):
+        super(Preprocess, self).__init__()
+
+    def call(self, inputs):
+        return (inputs / 255.) * 2 - 1
+
+class Postprocess(tf.keras.layers.Layer):
+    def __init__(self):
+        super(Postprocess, self).__init__()
+
+    def call(self, inputs):
+        return ((inputs + 1) / 2)
+
+def preprocess_fn():
+    inputs = tf.keras.layers.Input(shape=((args.image_size, args.image_size, args.image_channels)), 
+                                   dtype=tf.float32, name='inputs')
+    outputs = Preprocess()(inputs)
+    return tf.keras.models.Model(inputs=inputs, 
+                                 outputs=outputs, 
+                                 name="preprocess")
+
+def postprocess_fn():
+    inputs = tf.keras.layers.Input(shape=((args.image_size, args.image_size, args.image_channels)), 
+                                   dtype=tf.float32, name='inputs')
+    outputs = Postprocess()(inputs)
+    return tf.keras.models.Model(inputs=inputs, 
+                                 outputs=outputs, 
+                                 name="postprocess")
+
+def inference_model_fn(generator, postprocess):
+    x = generator.outputs
+    outputs = postprocess(x)
+    return tf.keras.models.Model(inputs=generator.inputs, 
+                                 outputs=outputs, 
+                                 name="inference_model")
+
 def generator_fn():
     inputs = tf.keras.layers.Input(shape=(args.codings_size), dtype=tf.float32, name='inputs')
     x = tf.keras.layers.Dense(6 * 6 * 256, use_bias=False)(inputs)
@@ -102,19 +135,23 @@ def generator_fn():
     x = tf.keras.layers.LeakyReLU(0.2)(x)
     x = tf.keras.layers.Reshape([6, 6, 256])(x)
 
-    x = tf.keras.layers.Conv2DTranspose(128, kernel_size=5, strides=1, padding="same", 
-                          use_bias=False)(x)
+    x = tf.keras.layers.Conv2DTranspose(128, kernel_size=5, strides=1, 
+                                        padding="same", 
+                                        use_bias=False)(x)
     x = tf.keras.layers.BatchNormalization()(x)
     x = tf.keras.layers.LeakyReLU(0.2)(x)
 
-    x = tf.keras.layers.Conv2DTranspose(64, kernel_size=5, strides=2, padding="same", 
-                          use_bias=False)(x)
+    x = tf.keras.layers.Conv2DTranspose(64, kernel_size=5, strides=2, 
+                                        padding="same", 
+                                        use_bias=False)(x)
     x = tf.keras.layers.BatchNormalization()(x)
     x = tf.keras.layers.LeakyReLU(0.2)(x)
 
-    outputs = tf.keras.layers.Conv2DTranspose(args.image_channels, kernel_size=5, strides=2, 
-                                padding="same", activation="tanh", 
-                                use_bias=False)(x)
+    outputs = tf.keras.layers.Conv2DTranspose(args.image_channels, kernel_size=5, 
+                                              strides=2, 
+                                              padding="same", 
+                                              activation="tanh", 
+                                              use_bias=False)(x)
 
     return tf.keras.models.Model(inputs=inputs, outputs=outputs, name="generator")
 
@@ -143,13 +180,12 @@ if __name__ == "__main__":
     parser.add_argument("--data_path", default="./cryptogans/data/attributes.csv", help="Path to dataset (attributes.csv)")
     parser.add_argument("--images_path", default="./cryptogans/data/images/", help="Path to images")
     parser.add_argument("--model_output_path", default="./models/", help="Path to output the generator model")
-    parser.add_argument("--images_output_path", default="./gen_images/", help="Path to output the generatored images during training")
+    parser.add_argument("--images_output_path", default="./gen_images/", help="Path to output generated images during training")
     parser.add_argument("--codings_size", type=int, default=100, help="Size of the latent z vector")
-    parser.add_argument("--image_size", type=int, default=24, help="images size")
-    parser.add_argument("--image_channels", type=int, default=4, help="images channels")
+    parser.add_argument("--image_size", type=int, default=24, help="Images size")
+    parser.add_argument("--image_channels", type=int, default=4, help="Images channels")
     parser.add_argument("--batch_size", type=int, default=16, help="Input batch size")
     parser.add_argument("--epochs", type=int, default=50, help="Number of epochs")
-    parser.add_argument("--plot_images", type=bool, default=False, help="Plot images after each epoch during training")    
     args = parser.parse_args()
     print(args)
 
@@ -157,15 +193,14 @@ if __name__ == "__main__":
         print(f"Saving generated images during training at: {args.images_output_path}")
         os.mkdir(args.images_output_path)
 
+    preprocess_model = preprocess_fn()
+
     print("Loading the dataset...")
     df = pd.read_csv(args.data_path)
     df.id = df.id.apply(lambda x: f"{args.images_path}punk{x:03d}.png")
 
     print("Creating TensorFlow dataset...")
-    sampling_ds = [get_dataset({"paths": df.id})]
-    dataset = (tf.data.Dataset.sample_from_datasets(sampling_ds)
-                              .batch(args.batch_size)
-                              .prefetch(tf.data.AUTOTUNE))
+    dataset = get_dataset({"paths": df.id}, args.batch_size)
     
     # Generator
     generator = generator_fn()
@@ -186,4 +221,6 @@ if __name__ == "__main__":
     train(dataset, args.epochs, args.batch_size, args.codings_size)
 
     print(f"Saving model at: {args.model_output_path}...")
-    generator.save(args.model_output_path)
+    postprocess_model = postprocess_fn()
+    inference_model = inference_model_fn(generator, postprocess_model)
+    inference_model.save(args.model_output_path)
