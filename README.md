@@ -14,12 +14,13 @@ This repository was created during the HuggingFace's [HugGAN sprint](https://git
 # Usage
 
 ## Train
+This script will train your models from scratch, but ir requires a `data/images` folder at root will the CryptoPunks images.
 ```bash
 python3 train.py
 ```
 
-## Inference using Gradio (CryptoPunk generation)
-<img src="./assets/gradio_inference.png" width="850" height="300">
+## Gradio App (CryptoPunk generation)
+<img src="./assets/gradio_inference.png" width="900" height="300">
 
 
 ### Using your own model
@@ -34,7 +35,7 @@ This will download the generator model from HuggingFace hub and serve it.
 python3 hf_app.py
 ```
 
-## Inference using Streamlit (CryptoPunk Captcha)
+## Streamlit App (CryptoPunk Captcha)
 <img src="./assets/streamlit_inference.png" width="350" height="500">
 
 ### Using your own model
