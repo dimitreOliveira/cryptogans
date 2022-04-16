@@ -2,3 +2,5 @@ numpy
 pandas
 matplotlib
 tensorflow
+streamlit
+gradio
